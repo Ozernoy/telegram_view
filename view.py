@@ -25,10 +25,10 @@ class View:
 
     def _wrap_callback(self, callback: Callable) -> Callable:
         """Wrap the callback to handle MessageResponse objects"""
-        def wrapped_callback(data_dict):
+        async def wrapped_callback(data_dict):
             logger.info("Calling wrapped callback")
             try:
-                messages = callback(data_dict)
+                messages = await callback(data_dict)
                 logger.info(f"Raw messages from callback: {messages}")
                 
                 if not messages:
@@ -82,7 +82,7 @@ class View:
             }
             logger.info(f"Sending delete_history data: {data_dict}")
             try:
-                self.view_callback(data_dict)
+                await self.view_callback(data_dict)
             except Exception as e:
                 logger.error(f"Error in view_callback for delete_history: {e}\n{traceback.format_exc()}")
         
@@ -93,20 +93,20 @@ class View:
         """Handle incoming messages"""
         user_id = message.from_user.id
         username = message.from_user.username
-        logger.info(f"Received message from user {username} (ID: {user_id}): {message.text[:50]}...")
+        logger.info(f"[View] Received message from user {username} (ID: {user_id}): {message.text[:50]}...")
         
         await message.bot.send_chat_action(message.chat.id, "typing")
         
         try:
             # Initialize user state if not exists
             if user_id not in self.user_states:
-                logger.info(f"Initializing state for user {user_id}")
+                logger.info(f"[View] Initializing state for user {user_id}")
                 self.user_states[user_id] = {"has_description": False, "description": None}
             
             if message.content_type == 'text':
                 if not self.user_states[user_id]["has_description"]:
                     # Store business description
-                    logger.info(f"Storing business description for user {user_id}")
+                    logger.info(f"[View] Storing business description for user {user_id}")
                     self.user_states[user_id]["description"] = message.text
                     self.user_states[user_id]["has_description"] = True
                     await message.answer("Thank you! I understand your business context. How can I help you today?")
@@ -120,45 +120,61 @@ class View:
                         "description": self.user_states[user_id]["description"],
                         "name": username
                     }
-                    logger.info(f"Sending message data to orchestrator: {data_dict}")
+                    logger.info(f"[View] Sending message data to orchestrator: {data_dict}")
                     
                     if self.view_callback:
                         try:
-                            responses = self.view_callback(data_dict)
-                            logger.info(f"Received responses from orchestrator: {responses}")
+                            logger.info("[View] Calling view_callback")
+                            responses = await self.view_callback(data_dict)
+                            logger.info(f"[View] Received responses from orchestrator: {responses}")
                             
                             if responses:
-                                for response in responses:
-                                    try:
-                                        # If it's a MessageResponse object
-                                        if hasattr(response, 'message'):
-                                            msg = response.message
-                                            logger.info(f"Sending MessageResponse: {msg}")
-                                            await message.answer(msg)
-                                        # If it's a string
-                                        elif isinstance(response, str):
-                                            logger.info(f"Sending string response: {response}")
-                                            await message.answer(response)
-                                        # If it's a dict
-                                        elif isinstance(response, dict):
-                                            msg = response.get('message', '')
-                                            if msg:
-                                                logger.info(f"Sending dict response: {msg}")
+                                logger.info(f"[View] Processing {len(responses) if isinstance(responses, list) else 1} responses")
+                                if isinstance(responses, list):
+                                    for i, response in enumerate(responses):
+                                        try:
+                                            logger.info(f"[View] Processing response {i}: {response}")
+                                            # If it's a MessageResponse object
+                                            if hasattr(response, 'message'):
+                                                msg = response.message
+                                                logger.info(f"[View] Sending MessageResponse: {msg}")
                                                 await message.answer(msg)
-                                        else:
-                                            logger.warning(f"Unknown response type: {type(response)}")
-                                            await message.answer(str(response))
-                                    except Exception as e:
-                                        logger.error(f"Error sending individual response {response}: {e}\n{traceback.format_exc()}")
+                                            # If it's a string
+                                            elif isinstance(response, str):
+                                                logger.info(f"[View] Sending string response: {response}")
+                                                await message.answer(response)
+                                            # If it's a dict
+                                            elif isinstance(response, dict):
+                                                msg = response.get('message', str(response))
+                                                logger.info(f"[View] Sending dict response: {msg}")
+                                                await message.answer(msg)
+                                            else:
+                                                msg = str(response)
+                                                logger.info(f"[View] Sending generic response: {msg}")
+                                                await message.answer(msg)
+                                        except Exception as e:
+                                            logger.error(f"[View] Error sending response {i}: {e}")
+                                else:
+                                    logger.info(f"[View] Processing single non-list response: {responses}")
+                                    await message.answer(str(responses))
+                            else:
+                                logger.warning("[View] No responses received from orchestrator")
+                                
                         except Exception as e:
-                            logger.error(f"Error in view_callback: {e}\n{traceback.format_exc()}")
-                            raise
+                            logger.error(f"[View] Error in view_callback: {e}")
+                            logger.error(traceback.format_exc())
+                            await message.answer("Sorry, I encountered an error processing your request. Please try again.")
+                    else:
+                        logger.error("[View] No view_callback configured")
+                        await message.answer("Sorry, I'm not properly configured to handle messages yet.")
             else:
+                logger.warning(f"[View] Unsupported content type: {message.content_type}")
                 await message.answer("Sorry, I can only process text messages at the moment.")
-            
+                
         except Exception as e:
-            logger.error(f"Error handling message: {e}\n{traceback.format_exc()}")
-            await message.answer("Sorry, I encountered an error processing your message.")
+            logger.error(f"[View] Error handling message: {e}")
+            logger.error(traceback.format_exc())
+            await message.answer("Sorry, something went wrong. Please try again.")
 
     async def run(self):
         """Run the telegram bot"""
