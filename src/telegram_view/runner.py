@@ -2,7 +2,7 @@ import asyncio
 import logging
 from typing import Optional, Callable
 import os
-from src.view import View
+from .view import View
 
 logger = logging.getLogger(__name__)
 
