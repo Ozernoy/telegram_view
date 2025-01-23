@@ -2,7 +2,7 @@ import asyncio
 import logging
 from typing import Optional, Callable
 import os
-from telegram_view.view import View
+from src.view import View
 
 logger = logging.getLogger(__name__)
 
