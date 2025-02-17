@@ -1,0 +1,5 @@
+/__pycache__/
+src/telegram_view.egg-info/
+/src/telegram_view/__pycache__
+telegram_bot.log
+venv/
