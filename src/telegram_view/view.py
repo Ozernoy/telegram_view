@@ -5,18 +5,26 @@ from aiogram.filters import Command
 import asyncio
 import os
 import traceback
+from typing import Optional, Callable
+from .view_abc import BaseView, RedisEnabledMixin
+from .state import UserState
+from .messages import WELCOME_MESSAGE, DESCRIPTION_ACCEPTED_MESSAGE, ERROR_MESSAGE
 
 logger = logging.getLogger(__name__)
 
-class View:
-    def __init__(self, token: str, view_callback: Optional[Callable] = None):
+class View(RedisEnabledMixin, BaseView):
+    def __init__(self, app, view_callback):
+        super().__init__()
         logger.info("Initializing Telegram View")
+        token = os.getenv("TELEGRAM_BOT_TOKEN")
+        if not token:
+            raise ValueError("TELEGRAM_BOT_TOKEN environment variable is not set")
         self.bot = Bot(token=token)
         self.dp = Dispatcher()
         self._original_callback = view_callback
         self.view_callback = self._wrap_callback(view_callback) if view_callback else None
-        # Dictionary to track user states
-        self.user_states = {}  # {user_id: {"has_description": bool, "description": str}}
+        # Dictionary to track user states and their business descriptions
+        self.user_states = {}  # {user_id: {"state": UserState, "business_description": str}}
         
         # Register handlers
         logger.info("Registering message handlers")
@@ -69,8 +77,11 @@ class View:
         username = message.from_user.username
         logger.info(f"Received /start command from user {username} (ID: {user_id})")
         
-        # Reset user state
-        self.user_states[user_id] = {"has_description": False, "description": None}
+        # Set initial state
+        self.user_states[user_id] = {
+            "state": UserState.WAITING_FOR_DESCRIPTION,
+            "business_description": None
+        }
         
         # Clear history in Graph
         if self.view_callback:
@@ -87,7 +98,7 @@ class View:
                 logger.error(f"Error in view_callback for delete_history: {e}\n{traceback.format_exc()}")
         
         # Send welcome message asking for business description
-        await message.answer("Welcome! Please provide a brief description of your business to help me assist you better.")
+        await message.answer(WELCOME_MESSAGE)
 
     async def _handle_message(self, message: types.Message):
         """Handle incoming messages"""
@@ -101,80 +112,53 @@ class View:
             # Initialize user state if not exists
             if user_id not in self.user_states:
                 logger.info(f"[View] Initializing state for user {user_id}")
-                self.user_states[user_id] = {"has_description": False, "description": None}
+                self.user_states[user_id] = {
+                    "state": UserState.WAITING_FOR_DESCRIPTION,
+                    "business_description": None
+                }
             
             if message.content_type == 'text':
-                if not self.user_states[user_id]["has_description"]:
-                    # Store business description
+                user_state = self.user_states[user_id]
+                
+                if user_state["state"] == UserState.WAITING_FOR_DESCRIPTION:
+                    # Store business description and update state
                     logger.info(f"[View] Storing business description for user {user_id}")
-                    self.user_states[user_id]["description"] = message.text
-                    self.user_states[user_id]["has_description"] = True
-                    await message.answer("Thank you! I understand your business context. How can I help you today?")
-                else:
-                    # Only send to orchestrator if we have business description
+                    user_state["business_description"] = message.text
+                    user_state["state"] = UserState.CHATTING
+                    await message.answer(DESCRIPTION_ACCEPTED_MESSAGE)
+                
+                elif user_state["state"] == UserState.CHATTING:
+                    # Prepare prompt with business context
+                    prompt = (
+                        f"Here is the user's business description: {user_state['business_description']}\n"
+                        f"Here is the user's question: {message.text}\n"
+                        "You must answer this question according to the description."
+                    )
+                    
+                    # Send to orchestrator
                     data_dict = {
-                        "type": "extendedText",
+                        "type": "text",
                         "chat_id": str(user_id),
+                        "user_id": str(user_id),
                         "sender": str(user_id),
-                        "data": message.text,
-                        "description": self.user_states[user_id]["description"],
+                        "text": prompt,
                         "name": username
                     }
                     logger.info(f"[View] Sending message data to orchestrator: {data_dict}")
                     
                     if self.view_callback:
                         try:
-                            logger.info("[View] Calling view_callback")
-                            responses = await self.view_callback(data_dict)
-                            logger.info(f"[View] Received responses from orchestrator: {responses}")
-                            
-                            if responses:
-                                logger.info(f"[View] Processing {len(responses) if isinstance(responses, list) else 1} responses")
-                                if isinstance(responses, list):
-                                    for i, response in enumerate(responses):
-                                        try:
-                                            logger.info(f"[View] Processing response {i}: {response}")
-                                            # If it's a MessageResponse object
-                                            if hasattr(response, 'message'):
-                                                msg = response.message
-                                                logger.info(f"[View] Sending MessageResponse: {msg}")
-                                                await message.answer(msg)
-                                            # If it's a string
-                                            elif isinstance(response, str):
-                                                logger.info(f"[View] Sending string response: {response}")
-                                                await message.answer(response)
-                                            # If it's a dict
-                                            elif isinstance(response, dict):
-                                                msg = response.get('message', str(response))
-                                                logger.info(f"[View] Sending dict response: {msg}")
-                                                await message.answer(msg)
-                                            else:
-                                                msg = str(response)
-                                                logger.info(f"[View] Sending generic response: {msg}")
-                                                await message.answer(msg)
-                                        except Exception as e:
-                                            logger.error(f"[View] Error sending response {i}: {e}")
-                                else:
-                                    logger.info(f"[View] Processing single non-list response: {responses}")
-                                    await message.answer(str(responses))
-                            else:
-                                logger.warning("[View] No responses received from orchestrator")
-                                
+                            await self.view_callback(data_dict)
                         except Exception as e:
-                            logger.error(f"[View] Error in view_callback: {e}")
-                            logger.error(traceback.format_exc())
-                            await message.answer("Sorry, I encountered an error processing your request. Please try again.")
-                    else:
-                        logger.error("[View] No view_callback configured")
-                        await message.answer("Sorry, I'm not properly configured to handle messages yet.")
+                            logger.error(f"Error in view_callback: {e}\n{traceback.format_exc()}")
+                            await message.answer(ERROR_MESSAGE)
+                
             else:
-                logger.warning(f"[View] Unsupported content type: {message.content_type}")
                 await message.answer("Sorry, I can only process text messages at the moment.")
                 
         except Exception as e:
-            logger.error(f"[View] Error handling message: {e}")
-            logger.error(traceback.format_exc())
-            await message.answer("Sorry, something went wrong. Please try again.")
+            logger.error(f"Error handling message: {e}\n{traceback.format_exc()}")
+            await message.answer(ERROR_MESSAGE)
 
     async def run(self):
         """Run the telegram bot"""
@@ -209,7 +193,7 @@ if __name__ == "__main__":
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if token:
         logger.info("Starting bot")
-        bot = View(token)
+        bot = View(None, None)
         asyncio.run(bot.run())
     else:
         logger.error("TELEGRAM_BOT_TOKEN not found in environment variables")

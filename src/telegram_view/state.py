@@ -5,8 +5,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 class UserState(Enum):
-    WAITING_FOR_DESCRIPTION = auto()
-    CHATTING = auto()
+    WAITING_FOR_DESCRIPTION = "waiting_for_description"
+    CHATTING = "chatting"
 
 class StateManager:
     def __init__(self):
