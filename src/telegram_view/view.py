@@ -5,6 +5,7 @@ from aiogram.filters import Command
 import asyncio
 import os
 import traceback
+import sqlite3
 from typing import Optional, Callable
 from .view_abc import BaseView, RedisEnabledMixin
 from .state import UserState
@@ -23,14 +24,80 @@ class View(RedisEnabledMixin, BaseView):
         self.dp = Dispatcher()
         self._original_callback = view_callback
         self.view_callback = self._wrap_callback(view_callback) if view_callback else None
-        # Dictionary to track user states and their business descriptions
-        self.user_states = {}  # {user_id: {"state": UserState, "business_description": str}}
+        
+        # Setup SQLite database
+        self.db_path = os.path.join("data", "telegram_users.db")
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        self._init_db()
+        
+        # Dictionary to track user states
+        self.user_states = {}  # {user_id: {"state": UserState}}
         
         # Register handlers
         logger.info("Registering message handlers")
+        
         self.dp.message.register(self._start_command, Command(commands=["start"]))
         self.dp.message.register(self._handle_message)
 
+    def _init_db(self):
+        """Initialize SQLite database with users table"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    user_id TEXT PRIMARY KEY,
+                    username TEXT,
+                    business_description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            conn.commit()
+            conn.close()
+            logger.info("Database initialized successfully")
+        except sqlite3.Error as e:
+            logger.error(f"Database initialization error: {e}")
+
+    def _save_business_description(self, user_id: str, username: str, description: str):
+        """Save or update user's business description"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO users (user_id, username, business_description)
+                VALUES (?, ?, ?)
+            ''', (str(user_id), username, description))
+            conn.commit()
+            conn.close()
+            logger.info(f"Saved business description for user {user_id}")
+        except sqlite3.Error as e:
+            logger.error(f"Error saving business description: {e}")
+
+    def _get_business_description(self, user_id: str) -> Optional[str]:
+        """Retrieve user's business description"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('SELECT business_description FROM users WHERE user_id = ?', (str(user_id),))
+            result = cursor.fetchone()
+            conn.close()
+            return result[0] if result else None
+        except sqlite3.Error as e:
+            logger.error(f"Error retrieving business description: {e}")
+            return None
+
+    def _delete_business_description(self, user_id: str):
+        """Delete user's business description from database"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM users WHERE user_id = ?', (str(user_id),))
+            conn.commit()
+            conn.close()
+            logger.info(f"Deleted business description for user {user_id}")
+        except sqlite3.Error as e:
+            logger.error(f"Error deleting business description: {e}")
+    # TODO: Check logic. Is it even necessary? What is return statement?
     def _wrap_callback(self, callback: Callable) -> Callable:
         """Wrap the callback to handle MessageResponse objects"""
         async def wrapped_callback(data_dict):
@@ -77,12 +144,15 @@ class View(RedisEnabledMixin, BaseView):
         username = message.from_user.username
         logger.info(f"Received /start command from user {username} (ID: {user_id})")
         
+        # Delete business description from database
+        self._delete_business_description(user_id)
+        
         # Set initial state
         self.user_states[user_id] = {
-            "state": UserState.WAITING_FOR_DESCRIPTION,
-            "business_description": None
+            "state": UserState.WAITING_FOR_DESCRIPTION
         }
         
+        # TODO: use other callback to clean only the current user's history
         # Clear history in Graph
         if self.view_callback:
             data_dict = {
@@ -112,10 +182,12 @@ class View(RedisEnabledMixin, BaseView):
             # Initialize user state if not exists
             if user_id not in self.user_states:
                 logger.info(f"[View] Initializing state for user {user_id}")
-                self.user_states[user_id] = {
-                    "state": UserState.WAITING_FOR_DESCRIPTION,
-                    "business_description": None
-                }
+                # Check if user has a business description in DB
+                description = self._get_business_description(user_id)
+                if description:
+                    self.user_states[user_id] = {"state": UserState.CHATTING}
+                else:
+                    self.user_states[user_id] = {"state": UserState.WAITING_FOR_DESCRIPTION}
             
             if message.content_type == 'text':
                 user_state = self.user_states[user_id]
@@ -123,17 +195,20 @@ class View(RedisEnabledMixin, BaseView):
                 if user_state["state"] == UserState.WAITING_FOR_DESCRIPTION:
                     # Store business description and update state
                     logger.info(f"[View] Storing business description for user {user_id}")
-                    user_state["business_description"] = message.text
+                    self._save_business_description(user_id, username, message.text)
                     user_state["state"] = UserState.CHATTING
                     await message.answer(DESCRIPTION_ACCEPTED_MESSAGE)
                 
                 elif user_state["state"] == UserState.CHATTING:
-                    # Prepare prompt with business context
-                    prompt = (
-                        f"Here is the user's business description: {user_state['business_description']}\n"
-                        f"Here is the user's question: {message.text}\n"
-                        "You must answer this question according to the description."
-                    )
+                    # Get business description from DB
+                    business_description = self._get_business_description(user_id)
+                    if not business_description:
+                        logger.error(f"No business description found for user {user_id}")
+                        user_state["state"] = UserState.WAITING_FOR_DESCRIPTION
+                        await message.answer(WELCOME_MESSAGE)
+                        return
+                    
+                
                     
                     # Send to orchestrator
                     data_dict = {
@@ -141,7 +216,7 @@ class View(RedisEnabledMixin, BaseView):
                         "chat_id": str(user_id),
                         "user_id": str(user_id),
                         "sender": str(user_id),
-                        "text": prompt,
+                        "text": message.text,
                         "name": username
                     }
                     logger.info(f"[View] Sending message data to orchestrator: {data_dict}")
