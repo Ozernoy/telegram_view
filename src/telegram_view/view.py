@@ -22,8 +22,7 @@ class View(RedisEnabledMixin, BaseView):
             raise ValueError("TELEGRAM_BOT_TOKEN environment variable is not set")
         self.bot = Bot(token=token)
         self.dp = Dispatcher()
-        self._original_callback = view_callback
-        self.view_callback = self._wrap_callback(view_callback) if view_callback else None
+        self.view_callback = view_callback
         
         # Setup SQLite database
         self.db_path = os.path.join("data", "telegram_users.db")
@@ -97,40 +96,6 @@ class View(RedisEnabledMixin, BaseView):
             logger.info(f"Deleted business description for user {user_id}")
         except sqlite3.Error as e:
             logger.error(f"Error deleting business description: {e}")
-    # TODO: Check logic. Is it even necessary? What is return statement?
-    def _wrap_callback(self, callback: Callable) -> Callable:
-        """Wrap the callback to handle MessageResponse objects"""
-        async def wrapped_callback(data_dict):
-            logger.info("Calling wrapped callback")
-            try:
-                messages = await callback(data_dict)
-                logger.info(f"Raw messages from callback: {messages}")
-                
-                if not messages:
-                    return []
-                
-                # Simply return the messages without sending them
-                # The _handle_message method will handle sending
-                processed_messages = []
-                for msg in messages:
-                    if hasattr(msg, 'message'):
-                        processed_messages.append(msg.message)
-                    elif isinstance(msg, str):
-                        processed_messages.append(msg)
-                    elif isinstance(msg, dict) and 'message' in msg:
-                        processed_messages.append(msg['message'])
-                    else:
-                        processed_messages.append(str(msg))
-                
-                logger.info(f"Processed messages: {processed_messages}")
-                return processed_messages
-                
-            except Exception as e:
-                logger.error(f"Error in wrapped callback: {str(e)}")
-                logger.error(traceback.format_exc())
-                return ["Sorry, I encountered an error processing your request. Please try again."]
-        
-        return wrapped_callback
 
     async def send_message(self, chat_id: str, message: str, chat_type: str = "c") -> str:
         """Send a message to the chat - this is used by the orchestrator"""
