@@ -117,14 +117,12 @@ class View(RedisEnabledMixin, BaseView):
             "state": UserState.WAITING_FOR_DESCRIPTION
         }
         
-        # TODO: use other callback to clean only the current user's history
         # Clear history in Graph
         if self.view_callback:
             data_dict = {
-                "type": "delete_history",
+                "type": "delete_entries_by_thread_id",
                 "chat_id": str(user_id),
                 "sender": str(user_id),
-                "name": username
             }
             logger.info(f"Sending delete_history data: {data_dict}")
             try:
