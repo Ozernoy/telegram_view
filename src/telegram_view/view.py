@@ -7,11 +7,15 @@ import os
 import traceback
 import sqlite3
 from typing import Optional, Callable
+from enum import Enum, auto
 from .view_abc import BaseView, RedisEnabledMixin
-from .state import UserState
 from .messages import WELCOME_MESSAGE, DESCRIPTION_ACCEPTED_MESSAGE, ERROR_MESSAGE
 
 logger = logging.getLogger(__name__)
+
+class UserState(Enum):
+    WAITING_FOR_DESCRIPTION = "waiting_for_description"
+    CHATTING = "chatting"
 
 class View(RedisEnabledMixin, BaseView):
     def __init__(self, app, view_callback):
