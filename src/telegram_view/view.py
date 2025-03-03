@@ -47,6 +47,7 @@ class View(RedisEnabledMixin, BaseView):
                 "type": "delete_entries_by_thread_id",
                 "chat_id": str(user_id),
                 "sender": str(user_id),
+                "thread_id": str(user_id)
             }
             logger.info(f"Sending delete_history data: {data_dict}")
             try:
@@ -75,6 +76,7 @@ class View(RedisEnabledMixin, BaseView):
                     "chat_id": str(user_id),
                     "user_id": str(user_id),
                     "sender": str(user_id),
+                    "thread_id": str(user_id),
                     "text": message.text,
                     "name": username
                 }
