@@ -57,42 +57,50 @@ class View(RedisEnabledMixin, BaseView):
         
         # Send welcome message asking for business description
         welcome_message = get_message("welcome", language_code)
-        await message.answer(welcome_message)
+        # await message.answer(welcome_message)
 
     async def _handle_message(self, message: types.Message):
         """Handle incoming messages"""
         user_id = message.from_user.id
         username = message.from_user.username
+        full_name = message.from_user.full_name
         language_code = message.from_user.language_code if message.from_user.language_code else "en"
         logger.info(f"[View] Received message from user {username} (ID: {user_id}): {message.text[:50]}...")
         
         await message.bot.send_chat_action(message.chat.id, "typing")
         
         try:
-            if message.content_type == 'text':
-                # Send to Redis via orchestrator
-                data_dict = {
-                    "type": "text",
-                    "chat_id": str(user_id),
-                    "user_id": str(user_id),
-                    "sender": str(user_id),
-                    "thread_id": str(user_id),
-                    "text": message.text,
-                    "name": username
-                }
-                logger.info(f"[View] Sending message data to orchestrator: {data_dict}")
-                
-                if self.view_callback:
-                    try:
-                        await self.view_callback(data_dict)
-                    except Exception as e:
-                        logger.error(f"Error in view_callback: {e}\n{traceback.format_exc()}")
-                        error_message = get_message("error", language_code)
-                        await message.answer(error_message)
-            else:
+            if message.content_type != 'text':
                 error_message = get_message("error", language_code)
                 await message.answer(error_message)
-                
+                return 
+            
+            # Send to Redis via orchestrator
+            data_dict = {
+                "type": "text",
+                "chat_id": str(user_id),
+                "user_id": str(user_id),
+                "sender": str(user_id),
+                "thread_id": str(user_id),
+                "text": message.text,   
+            }
+            
+            data_dict['extra_data'] = {
+                "user_details": {
+                    "username": username,
+                    "name": full_name
+                }
+            }
+            logger.info(f"[View] Sending message data to orchestrator: {data_dict}")
+            
+            if self.view_callback:
+                try:
+                    await self.view_callback(data_dict)
+                except Exception as e:
+                    logger.error(f"Error in view_callback: {e}\n{traceback.format_exc()}")
+                    error_message = get_message("error", language_code)
+                    await message.answer(error_message)
+            
         except Exception as e:
             logger.error(f"Error handling message: {e}\n{traceback.format_exc()}")
             error_message = get_message("error", language_code)
