@@ -11,8 +11,8 @@ from utils.schemas import AgentRequest, AgentRequestType
 
 logger = logging.getLogger(__name__)
 
-class View(RedisEnabledMixin, BaseView):
-    def __init__(self, app, view_callback):
+class TelegramView(RedisEnabledMixin, BaseView):
+    def __init__(self, view_callback):
         super().__init__()
         logger.info("Initializing Telegram View")
         token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -26,6 +26,11 @@ class View(RedisEnabledMixin, BaseView):
         logger.info("Registering message handlers")
         self.dp.message.register(self._start_command, Command(commands=["start"]))
         self.dp.message.register(self._handle_message)
+
+    @classmethod
+    def from_config(cls, config: dict, callback: Callable) -> 'TelegramView':
+        """Creates TelegramView instance from config"""
+        return cls(view_callback=callback)
 
     async def send_message(self, chat_id: str, message: str, chat_type: str = "c") -> str:
         """Send a message to the chat - this is used by the orchestrator"""
