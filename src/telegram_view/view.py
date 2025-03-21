@@ -7,6 +7,7 @@ import os
 import traceback
 from .view_abc import BaseView, RedisEnabledMixin
 from .messages import get_message
+from utils.schemas import AgentRequest, AgentRequestType
 
 logger = logging.getLogger(__name__)
 
@@ -43,15 +44,16 @@ class View(RedisEnabledMixin, BaseView):
         
         # Clear history in Graph
         if self.view_callback:
-            data_dict = {
-                "type": "delete_entries_by_thread_id",
-                "chat_id": str(user_id),
-                "sender": str(user_id),
-                "thread_id": str(user_id)
-            }
-            logger.info(f"Sending delete_history data: {data_dict}")
+            request = AgentRequest(
+                chat_id=user_id,
+                type=AgentRequestType.DELETE_ENTRIES_BY_THREAD_ID,
+                user_details={"username": username, "name": f"{first_name} {last_name}".strip()},
+                bypass=True  # Set bypass since this is a control message
+            )
+            
+            logger.info(f"Sending delete_history request: {request}")
             try:
-                await self.view_callback(data_dict)
+                await self.view_callback(request)
             except Exception as e:
                 logger.error(f"Error in view_callback for delete_history: {e}\n{traceback.format_exc()}")
         
@@ -75,27 +77,24 @@ class View(RedisEnabledMixin, BaseView):
                 await message.answer(error_message)
                 return 
             
-            # Send to Redis via orchestrator
-            data_dict = {
-                "type": "text",
-                "chat_id": str(user_id),
-                "user_id": str(user_id),
-                "sender": str(user_id),
-                "thread_id": str(user_id),
-                "text": message.text,   
-            }
-            
-            data_dict['extra_data'] = {
-                "user_details": {
+            # Create AgentRequest
+            request = AgentRequest(
+                chat_id=user_id,
+                type=AgentRequestType.TEXT,
+                message=message.text,
+                user_details={
                     "username": username,
-                    "name": full_name
-                }
-            }
-            logger.info(f"[View] Sending message data to orchestrator: {data_dict}")
+                    "name": full_name,
+                    "language_code": language_code
+                },
+                bypass=False  # Set bypass=False for normal messages
+            )
+            
+            logger.info(f"[View] Sending message request to orchestrator: {request}")
             
             if self.view_callback:
                 try:
-                    await self.view_callback(data_dict)
+                    await self.view_callback(request)
                 except Exception as e:
                     logger.error(f"Error in view_callback: {e}\n{traceback.format_exc()}")
                     error_message = get_message("error", language_code)
