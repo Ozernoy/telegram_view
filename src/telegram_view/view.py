@@ -5,9 +5,9 @@ from aiogram.filters import Command
 import asyncio
 import os
 import traceback
-from .view_abc import BaseView, RedisEnabledMixin
+from view_utils.view_abc import BaseView, RedisEnabledMixin
 from .messages import get_message
-from utils.schemas import AgentRequest, AgentRequestType
+from utils.schemas import AgentRequest, AgentRequestType, AgentResponse
 
 logger = logging.getLogger(__name__)
 
@@ -25,18 +25,42 @@ class TelegramView(RedisEnabledMixin, BaseView):
         # Register handlers
         logger.info("Registering message handlers")
         self.dp.message.register(self._start_command, Command(commands=["start"]))
+        self.dp.message.register(self._delete_all_history, Command(commands=["delete_all_history"]))
         self.dp.message.register(self._handle_message)
 
     @classmethod
-    def from_config(cls, config: dict, callback: Callable) -> 'TelegramView':
-        """Creates TelegramView instance from config"""
+    def from_config(cls, config, callback: Callable) -> 'TelegramView':
+        """
+        Creates TelegramView instance from config.
+        
+        Args:
+            config: Either a TelegramViewConfig from the new config system or a dict for backward compatibility
+            callback: The callback function to handle view events
+            
+        Returns:
+            TelegramView: A configured view instance
+        """
+        # Currently, TelegramView doesn't use any special configuration,
+        # but this ensures future compatibility with the config system
+        # We can add Telegram-specific parameters here when needed
         return cls(view_callback=callback)
 
-    async def send_message(self, chat_id: str, message: str, chat_type: str = "c") -> str:
-        """Send a message to the chat - this is used by the orchestrator"""
-        logger.info(f"Sending message to {chat_id}: {message}")
+    async def send_message(self, response: AgentResponse) -> str:
+        """Send a message to the chat - this is used by the orchestrator
+        
+        Args:
+            response: AgentResponse object containing chat_id and message to send
+            
+        Returns:
+            str: The message that was sent, or empty string if no message was available
+        """
+        chat_id = response.chat_id
+        message = response.message or ""
+        
+        logger.info(f"Sending message to {chat_id}: {message[:50]}... (length: {len(response)})")
         await self.bot.send_message(chat_id=chat_id, text=message)
-        return message  # Return message for compatibility with other views
+        return message
+
 
     async def _start_command(self, message: types.Message):
         """Handle the /start command"""
@@ -51,7 +75,7 @@ class TelegramView(RedisEnabledMixin, BaseView):
         if self.view_callback:
             request = AgentRequest(
                 chat_id=user_id,
-                type=AgentRequestType.DELETE_ENTRIES_BY_THREAD_ID,
+                type=AgentRequestType.DELETE_ENTRIES_BY_CHAT_ID,
                 user_details={"username": username, "name": f"{first_name} {last_name}".strip()},
                 bypass=True  # Set bypass since this is a control message
             )
@@ -65,6 +89,20 @@ class TelegramView(RedisEnabledMixin, BaseView):
         # Send welcome message asking for business description
         welcome_message = get_message("welcome", language_code)
         # await message.answer(welcome_message)
+
+    async def _delete_all_history(self, message: types.Message):
+        agent_request = AgentRequest(
+                chat_id=0,  # Using 0 as a placeholder for all chats
+                type=AgentRequestType.DELETE_HISTORY,
+                message=None
+            )
+        
+        logger.info(f"Sending delete_history request: {agent_request}")
+        
+        try:
+            await self.view_callback(agent_request)
+        except Exception as e:
+            logger.error(f"Error in view_callback for delete_history: {e}\n{traceback.format_exc()}")
 
     async def _handle_message(self, message: types.Message):
         """Handle incoming messages"""
@@ -143,7 +181,7 @@ if __name__ == "__main__":
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if token:
         logger.info("Starting bot")
-        bot = View(None, None)
+        bot = TelegramView(None)
         asyncio.run(bot.run())
     else:
         logger.error("TELEGRAM_BOT_TOKEN not found in environment variables")
