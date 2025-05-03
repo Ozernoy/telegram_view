@@ -7,7 +7,8 @@ import os
 import traceback
 from view_utils.view_abc import BaseView, RedisEnabledMixin
 from .messages import get_message
-from utils.schemas import AgentRequest, AgentRequestType, AgentResponse
+# Todo: Need to create own schemas for views, and combine views into one repo
+from agent_ti.utils.schemas import AgentRequest, AgentRequestType, AgentResponse
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,7 @@ class TelegramView(RedisEnabledMixin, BaseView):
         # Clear history in Graph
         if self.view_callback:
             request = AgentRequest(
-                chat_id=user_id,
+                chat_id=str(user_id),
                 type=AgentRequestType.DELETE_ENTRIES_BY_CHAT_ID,
                 user_details={"username": username, "name": f"{first_name} {last_name}".strip()},
                 bypass=True  # Set bypass since this is a control message
@@ -92,7 +93,7 @@ class TelegramView(RedisEnabledMixin, BaseView):
 
     async def _delete_all_history(self, message: types.Message):
         agent_request = AgentRequest(
-                chat_id=0,  # Using 0 as a placeholder for all chats
+                chat_id=str(0),  # Using 0 as a placeholder for all chats
                 type=AgentRequestType.DELETE_HISTORY,
                 message=None
             )
@@ -122,7 +123,7 @@ class TelegramView(RedisEnabledMixin, BaseView):
             
             # Create AgentRequest
             request = AgentRequest(
-                chat_id=user_id,
+                chat_id=str(user_id),
                 type=AgentRequestType.TEXT,
                 message=message.text,
                 user_details={
