@@ -5,14 +5,14 @@ from aiogram.filters import Command
 import asyncio
 import os
 import traceback
-from view_utils.view_abc import BaseView, RedisEnabledMixin
+from view_utils.view_abc import BaseView
 from .messages import get_message
 # Todo: Need to create own schemas for views, and combine views into one repo
 from agent_ti.utils.schemas import AgentRequest, AgentRequestType, AgentResponse
 
 logger = logging.getLogger(__name__)
 
-class TelegramView(RedisEnabledMixin, BaseView):
+class TelegramView(BaseView):
     def __init__(self, view_callback):
         super().__init__()
         logger.info("Initializing Telegram View")
@@ -21,6 +21,7 @@ class TelegramView(RedisEnabledMixin, BaseView):
             raise ValueError("TELEGRAM_BOT_TOKEN environment variable is not set")
         self.bot = Bot(token=token)
         self.dp = Dispatcher()
+        # Todo: I don't think view should be calling the callback directly, it should be handled by orchestrator
         self.view_callback = view_callback
         
         # Register handlers
