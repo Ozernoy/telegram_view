@@ -7,7 +7,8 @@ import os
 import traceback
 from view_utils.view_abc import BaseView
 from .messages import get_message
-from utils.schemas import AgentRequest, AgentRequestType, AgentResponse
+# from utils.schemas import AgentRequest, AgentRequestType, AgentResponse
+from agent_ti.utils.schemas import AgentRequest, AgentRequestType, AgentResponse, RequestStatus, Metadata 
 
 logger = logging.getLogger(__name__)
 
