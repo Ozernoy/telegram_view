@@ -25,7 +25,7 @@ class TelegramView(BaseView):
         self.view_callback = view_callback
         
         # Register handlers
-        logger.info("Registering message handlers")
+        logger.debug("Registering message handlers")
         self.dp.message.register(self._start_command, Command(commands=["start"]))
         self.dp.message.register(self._delete_all_history, Command(commands=["delete_all_history"]))
         self.dp.message.register(self._handle_message)
@@ -59,7 +59,7 @@ class TelegramView(BaseView):
         chat_id = response.chat_id
         message = response.message or ""
         
-        logger.info(f"Sending message to {chat_id}: {message[:50]}... (length: {len(response)})")
+        logger.debug(f"Sending message to {chat_id}: {message[:50]}... (length: {len(response)})")
         await self.bot.send_message(chat_id=chat_id, text=message)
         return message
 
@@ -135,7 +135,7 @@ class TelegramView(BaseView):
                 bypass=False  # Set bypass=False for normal messages
             )
             
-            logger.info(f"[View] Sending message request to orchestrator: {request}")
+            logger.debug(f"[View] Sending message request to orchestrator: {request}")
             
             if self.view_callback:
                 try:
@@ -152,7 +152,7 @@ class TelegramView(BaseView):
 
     async def run(self):
         """Run the telegram bot"""
-        logger.info("Starting telegram bot")
+        logger.debug("Starting telegram bot")
         try:
             await self.dp.start_polling(self.bot)
         except Exception as e:
