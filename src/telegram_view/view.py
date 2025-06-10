@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class TelegramView(BaseView):
-    def __init__(self, view_callback):
+    def __init__(self, view_callback, view_config):
         super().__init__()
         logger.info("Initializing Telegram View")
         token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -32,6 +32,7 @@ class TelegramView(BaseView):
         self.bot = Bot(token=token)
         self.dp = Dispatcher()
         self.view_callback = view_callback
+        self.view_config = view_config
         # Store chat history as a list of dictionaries with type and message
         self.chat_history = []
         # Track which users are in issue reporting mode
@@ -46,12 +47,12 @@ class TelegramView(BaseView):
         self.dp.message.register(self._handle_message)
 
     @classmethod
-    def from_config(cls, config, callback: Callable) -> "TelegramView":
+    def from_config(cls, view_config, callback: Callable) -> "TelegramView":
         """
         Creates TelegramView instance from config.
 
         Args:
-            config: Either a TelegramViewConfig from the new config system or a dict for backward compatibility
+            view_config: Either a TelegramViewConfig from the new config system or a dict for backward compatibility
             callback: The callback function to handle view events
 
         Returns:
@@ -60,7 +61,7 @@ class TelegramView(BaseView):
         # Currently, TelegramView doesn't use any special configuration,
         # but this ensures future compatibility with the config system
         # We can add Telegram-specific parameters here when needed
-        return cls(view_callback=callback)
+        return cls(view_callback=callback, view_config=view_config)
 
     async def send_message(self, response: AgentResponse) -> str:
         """Send a message to the chat - this is used by the orchestrator
@@ -120,7 +121,7 @@ class TelegramView(BaseView):
                 bypass=True,  # Set bypass since this is a control message
             )
 
-            logger.info(f"Sending delete_history request")
+            logger.info("Sending delete_history request")
             try:
                 await self.view_callback(request)
             except Exception as e:
@@ -136,7 +137,7 @@ class TelegramView(BaseView):
         keyboard = self._get_main_keyboard()
 
         # Send welcome message
-        welcome_msg = "Provision-ISR Support Agent"
+        welcome_msg = self.view_config.title
         await message.answer(welcome_msg, reply_markup=keyboard)
         self.chat_history.append({"type": "ai", "message": welcome_msg})
 
@@ -200,11 +201,14 @@ class TelegramView(BaseView):
                 self.reporting_users.remove(user_id)
                 # Get current chat history before handling the report
                 await handle_issue_report(user_id, message.text, self.chat_history)
-                confirmation = "Thank you for reporting the issue."
+                confirmation = "Thank you for reporting the issue, starting new chat..."
                 await message.answer(
                     confirmation, reply_markup=self._get_main_keyboard()
                 )
                 self.chat_history.append({"type": "ai", "message": confirmation})
+                # Clear chat history after issue report to prevent old messages in future reports
+                await self._start_command(message)
+                
                 return
 
             # Handle normal messages
@@ -220,7 +224,7 @@ class TelegramView(BaseView):
                 bypass=False,
             )
 
-            logger.debug(f"[View] Sending message request to orchestrator: {request}")
+            logger.debug(f"Sending message request to orchestrator: {request}")
 
             if self.view_callback:
                 try:
