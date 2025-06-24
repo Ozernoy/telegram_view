@@ -3,6 +3,7 @@ from typing import Callable, Optional, Dict, List, Any
 import asyncio
 import os
 import traceback
+import time
 from common_utils.view.view_abc import BaseView
 from common_utils.schemas import (
     AgentRequest,
@@ -11,30 +12,32 @@ from common_utils.schemas import (
     RequestStatus,
     Message,
 )
-from .interfaces.telegram_bot import TelegramBotInterface
+from .interfaces.telegram_tester_bot import TesterBotInterface
 
 logger = logging.getLogger(__name__)
 
 
 class TelegramView(BaseView):
-    def __init__(self, view_callback, view_config):
+    def __init__(self, view_callback, config):
         super().__init__()
         logger.info("Initializing Telegram View")
-        token = os.getenv("TELEGRAM_BOT_TOKEN")
-        if not token:
+        self.token = os.getenv("TELEGRAM_BOT_TOKEN")
+        if not self.token:
             raise ValueError("TELEGRAM_BOT_TOKEN environment variable is not set")
         
         self.view_callback = view_callback
-        self.view_config = view_config
+        self.config = config
+        logger.info(f"Config: {self.config}")
+        self.view_config = config.view
         
         # Initialize the Telegram bot interface
-        self.bot_interface = TelegramBotInterface(token)
+        self.bot_interface = TesterBotInterface(self.token, self.config)
         
         # Setup message handling
-        self.bot_interface.setup_handlers(self._handle_bot_message, view_config)
+        self.bot_interface.setup_handlers(self._handle_bot_message, self.view_config)
 
     @classmethod
-    def from_config(cls, view_config, callback: Callable) -> "TelegramView":
+    def from_config(cls, config, callback: Callable) -> "TelegramView":
         """
         Creates TelegramView instance from config.
 
@@ -45,7 +48,7 @@ class TelegramView(BaseView):
         Returns:
             TelegramView: A configured view instance
         """
-        return cls(view_callback=callback, view_config=view_config)
+        return cls(view_callback=callback, config=config)
 
     # TODO: Change message passed to callback from AgentRequest to Message 
     async def _handle_bot_message(self, message_data: Dict[str, Any]) -> Optional[str]:
@@ -64,15 +67,27 @@ class TelegramView(BaseView):
             
             if message_type == "start_command":
                 # Handle start command - delete user history
-                request = AgentRequest(
-                    chat_id=message_data["user_id"],
-                    type=AgentRequestType.DELETE_ENTRIES_BY_CHAT_ID,
-                    user_details={
-                        "username": message_data["username"],
-                        "name": f"{message_data['first_name']} {message_data.get('last_name', '')}".strip(),
-                    },
-                    bypass=True,  # Set bypass since this is a control message
+                request = Message(
+                    webhook_type="incoming_message",
+                    platform="telegram",
+                    timestamp=message_data.get("timestamp", int(time.time())),
+                    message_type="delete_history",
+                    chatbot_id=self.token,
+                    sender_id=str(message_data.get("user_id")),
+                    sender_name=message_data.get("full_name"),
+                    chat_type="c",
                 )
+
+
+                # request = AgentRequest(
+                #     chat_id=message_data["user_id"],
+                #     type=AgentRequestType.DELETE_ENTRIES_BY_CHAT_ID,
+                #     user_details={
+                #         "username": message_data["username"],
+                #         "name": f"{message_data['first_name']} {message_data.get('last_name', '')}".strip(),
+                #     },
+                #     bypass=True,  # Set bypass since this is a control message
+                # )
                 
                 logger.info(f"Sending {message_data['user_id']} delete_history request for start command")
                 if self.view_callback:
@@ -81,11 +96,21 @@ class TelegramView(BaseView):
                 
             elif message_type == "delete_all_history":
                 # Handle delete all history command
-                request = AgentRequest(
-                    chat_id=0,  # Using 0 as a placeholder for all chats
-                    type=AgentRequestType.DELETE_HISTORY,
-                    message=None,
+                request = Message(
+                    webhook_type="incoming_message",
+                    platform="telegram",
+                    timestamp=message_data.get("timestamp", int(time.time())),
+                    message_type="delete_history",
+                    chatbot_id=self.token,
+                    sender_id=str(message_data.get("user_id")),
+                    sender_name=message_data.get("full_name"),
+                    chat_type="c",
                 )
+                # request = AgentRequest(
+                #     chat_id=0,  # Using 0 as a placeholder for all chats
+                #     type=AgentRequestType.DELETE_HISTORY,
+                #     message=None,
+                # )
                 
                 logger.info("Sending delete_all_history request")
                 if self.view_callback:
@@ -94,17 +119,29 @@ class TelegramView(BaseView):
                 
             elif message_type == "text_message":
                 # Handle normal text messages
-                request = AgentRequest(
-                    chat_id=message_data["user_id"],
-                    type=AgentRequestType.TEXT,
-                    message=message_data["text"],
-                    user_details={
-                        "username": message_data["username"],
-                        "name": message_data["full_name"],
-                        "language_code": message_data["language_code"],
-                    },
-                    bypass=False,
+                request = Message(
+                    webhook_type="incoming_message",
+                    platform="telegram",
+                    timestamp=message_data.get("timestamp", int(time.time())),
+                    message_type="text",
+                    data=message_data.get("text"),
+                    chatbot_id=self.token,
+                    sender_id=str(message_data.get("user_id")),
+                    sender_name=message_data.get("full_name"),
+                    chat_type="c",
                 )
+
+                # request = AgentRequest(
+                #     chat_id=message_data["user_id"],
+                #     type=AgentRequestType.TEXT,
+                #     message=message_data["text"],
+                #     user_details={
+                #         "username": message_data["username"],
+                #         "name": message_data["full_name"],
+                #         "language_code": message_data["language_code"],
+                #     },
+                #     bypass=False,
+                # )
                 
                 logger.debug(f"Sending message request to orchestrator: {request}")
                 

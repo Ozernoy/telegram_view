@@ -8,14 +8,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 logger = logging.getLogger(__name__)
 
 
-def get_sheets_table():
+def get_sheets_table(config):
     """Initialize and return Google Sheets table for issues."""
     try:
         # Get credentials from config
-        credentials_path = os.path.join(
-            "configs",
-            "awesome-tempo-437916-e6-27d0ad7fb868.json",
-        )
+        credentials_path = config.sheets.path_to_json_file
 
         # Use the same scope as in __init__.py
         scope = [
@@ -28,7 +25,7 @@ def get_sheets_table():
         client = gspread.authorize(creds)
 
         # Get the issues table from the Provision-ISR AI sheet
-        table = client.open("Provision-ISR AI").worksheet("Issues")
+        table = client.open(config.sheets.data_sheet_name).worksheet(config.sheets.issues_table)
         return table
     except Exception as e:
         logger.error(f"Failed to initialize Google Sheets table: {e}")
@@ -46,7 +43,7 @@ def format_chat_history(chat_history: List[Dict[str, Any]]) -> str:
 
 
 async def handle_issue_report(
-    chat_id: int, issue_details: str, chat_history: List[Dict[str, Any]]
+    chat_id: int, issue_details: str, chat_history: List[Dict[str, Any]], config
 ) -> None:
     """
     Handle issue reports by logging them and appending to Google Sheets.
@@ -69,7 +66,7 @@ async def handle_issue_report(
 
     # Append to Google Sheets
     try:
-        table = get_sheets_table()
+        table = get_sheets_table(config)
         if not table:
             logger.error("Could not initialize Google Sheets table")
             return

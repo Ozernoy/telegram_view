@@ -3,19 +3,17 @@ from typing import Callable, Optional, Dict, List, Any
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-import asyncio
-import os
 import traceback
 from ..messages import get_message
-from ..utils import handle_issue_report
+from .tester_utils import handle_issue_report
 
 logger = logging.getLogger(__name__)
 
 
-class TelegramBotInterface:
+class TesterBotInterface:
     """Pure Telegram bot interface - handles only Telegram-specific functionality"""
     
-    def __init__(self, token: str):
+    def __init__(self, token: str, config):
         """Initialize the Telegram bot interface"""
         if not token:
             raise ValueError("TELEGRAM_BOT_TOKEN is required")
@@ -23,7 +21,8 @@ class TelegramBotInterface:
         self.dp = Dispatcher()
         self.chat_history = []
         self.reporting_users: set[int] = set()
-        
+        self.config = config
+
     def get_main_keyboard(self) -> ReplyKeyboardMarkup:
         """Create a keyboard with the main action buttons"""
         keyboard = ReplyKeyboardMarkup(
@@ -61,13 +60,13 @@ class TelegramBotInterface:
         """Handle issue report submission"""
         user_id = message.from_user.id
         self.reporting_users.remove(user_id)
-        await handle_issue_report(user_id, message.text, self.chat_history)
+        await handle_issue_report(user_id, message.text, self.chat_history, self.config)
         confirmation = "Thank you for reporting the issue, starting new chat..."
         await message.answer(confirmation, reply_markup=self.get_main_keyboard())
         self.chat_history.append({"type": "ai", "message": confirmation})
         # Need to call start_command - we'll handle this in setup_handlers
 
-    def setup_handlers(self, orchestrator_callback: Callable, config):
+    def setup_handlers(self, handle_message: Callable, config):
         """Setup message handlers for the Telegram bot
         
         Args:
@@ -95,27 +94,29 @@ class TelegramBotInterface:
                 "text": text
             }
             
-            logger.info(f"[TelegramBot] Processing {message_type} from user {username} (ID: {user_id})")
+            logger.info(f"Processing {message_type} from user {username} (ID: {user_id})")
             
-            # Call orchestrator callback and return response
+            # Call orchestrator callback and DO NOT return response
             try:
-                response = await orchestrator_callback(message_data)
-                if response:
-                    await self.send_message(user_id, response)
-                    self.chat_history.append({"type": "ai", "message": response})
-                return response
+                await handle_message(message_data)
+                # response = await orchestrator_callback(message_data)
+                # if response:
+                #     await self.send_message(user_id, response)
+                #     self.chat_history.append({"type": "ai", "message": response})
+                # return response
             except Exception as e:
                 logger.error(f"Error in orchestrator callback: {e}\n{traceback.format_exc()}")
                 if message_type == "text_message":
                     # Only show error to user for text messages
                     error_message = get_message("error", language_code)
                     await message.answer(error_message, reply_markup=self.get_main_keyboard())
-                    self.chat_history.append({"type": "ai", "message": error_message})
-                return None
+                    # self.chat_history.append({"type": "ai", "message": error_message})
+                # return None
         
         @self.dp.message(Command(commands=["start"]))
         async def start_command(message: types.Message):
             """Handle the /start command"""
+            logging.debug(f"Message: {message}")
             # Clear local state before processing
             user_id = message.from_user.id
             self.chat_history.clear()
@@ -140,7 +141,7 @@ class TelegramBotInterface:
             self.chat_history.clear()
 
         @self.dp.message()
-        async def handle_message(message: types.Message):
+        async def handle_telegram_message(message: types.Message):
             """Handle incoming messages"""
             user_id = message.from_user.id
             language_code = message.from_user.language_code or "en"
