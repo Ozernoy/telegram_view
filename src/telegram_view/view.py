@@ -160,12 +160,12 @@ class TelegramView(BaseView):
         """Send a message to the chat - this is used by the orchestrator
 
         Args:
-            response: AgentResponse object containing chat_id and message to send
+            chat_id: The chat ID to send the message to
+            message: The message text to send
 
         Returns:
             str: The message that was sent, or empty string if no message was available
         """
-        # message = response.message or ""
         if message:
             logger.debug(f"Sending message to {chat_id}: {message[:50]}... (length: {len(message)})")
             await self.bot_interface.send_message(chat_id, message)
