@@ -41,6 +41,8 @@ class TesterBotInterface:
         """Send a message via Telegram bot"""
         logger.debug(f"Sending message to {chat_id}: {message[:50]}...")
         await self.bot.send_message(chat_id=chat_id, text=message)
+        # Add AI response to chat history for issue reporting
+        self.chat_history.append({"type": "ai", "message": message})
 
     async def _send_error_message(self, message: types.Message, language_code: str):
         """Send an error message to the user"""
