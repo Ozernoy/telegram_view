@@ -24,4 +24,4 @@ where = ["src"]
 "" = "src"
 
 [tool.uv.sources]
-common-utils = { path = "../common-utils", editable = true } 
+common-utils = { workspace = true } 
