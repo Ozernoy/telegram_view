@@ -1,27 +1,19 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "telegram-view"
+name = "telegram_view"
 version = "1.1.1"
 description = "Telegram integration for smart-orchestrator"
-authors = [
-    {name = "Ozernoy"}
-]
-requires-python = ">=3.8"
-
+authors = [{name = "Ozernoy"}]
 dependencies = [
     "aiogram",
     "python-dotenv",
-    "common-utils",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-dir]
-"" = "src"
-
-[tool.uv.sources]
-common-utils = { workspace = true } 
+"" = "src" 
