@@ -10,6 +10,9 @@ authors = [{name = "Ozernoy"}]
 dependencies = [
     "aiogram",
     "python-dotenv",
+    "gspread",
+    "oauth2client",
+    "common-utils",
 ]
 
 [tool.setuptools.packages.find]
