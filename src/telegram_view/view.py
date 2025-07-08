@@ -13,6 +13,7 @@ from common_utils.schemas import (
     Message,
 )
 from .interfaces.telegram_tester_bot import TesterBotInterface
+from .interfaces.showcase_interface import ShowcaseInterface
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +31,15 @@ class TelegramView(BaseView):
         logger.info(f"Config: {self.config}")
         self.view_config = config.view
         
-        # Initialize the Telegram bot interface
-        self.bot_interface = TesterBotInterface(self.token, self.config)
+        # Initialize the Telegram bot interface based on config
+        interface_type = getattr(self.view_config, 'interface', 'tester')
+        
+        if interface_type == 'tester':
+            self.bot_interface = TesterBotInterface(self.token, self.config)
+        elif interface_type == 'showcase':
+            self.bot_interface = ShowcaseInterface(self.token, self.config)
+        else:
+            raise ValueError(f"Unsupported interface type: {interface_type}. Supported types: 'tester', 'showcase'")
         
         # Setup message handling
         self.bot_interface.setup_handlers(self._handle_bot_message, self.view_config)
