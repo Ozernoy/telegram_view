@@ -12,6 +12,7 @@ from common_utils.schemas import (
     RequestStatus,
     Message,
 )
+from common_utils.logging.bug_catcher import report_error_if_enabled
 from .interfaces.telegram_tester_bot import TesterBotInterface
 from .interfaces.showcase_interface import ShowcaseInterface
 
@@ -161,6 +162,14 @@ class TelegramView(BaseView):
             return None
             
         except Exception as e:
+            # Report error using the centralized bug catcher function
+            report_error_if_enabled(
+                self.config, 
+                e, 
+                "Error in _handle_bot_message (Telegram View)", 
+                {"message_data": str(message_data)}
+            )
+            
             logger.error(f"Error in _handle_bot_message: {e}\n{traceback.format_exc()}")
             return None
 
@@ -174,10 +183,22 @@ class TelegramView(BaseView):
         Returns:
             str: The message that was sent, or empty string if no message was available
         """
-        if message:
-            logger.debug(f"Sending message to {chat_id}: {message[:50]}... (length: {len(message)})")
-            await self.bot_interface.send_message(chat_id, message)
-        return message
+        try:
+            if message:
+                logger.debug(f"Sending message to {chat_id}: {message[:50]}... (length: {len(message)})")
+                await self.bot_interface.send_message(chat_id, message)
+            return message
+        except Exception as e:
+            # Report error using the centralized bug catcher function
+            report_error_if_enabled(
+                self.config, 
+                e, 
+                "Error in send_message (Telegram View)", 
+                {"chat_id": chat_id, "message_length": len(message) if message else 0}
+            )
+            
+            logger.error(f"Error sending message: {e}\n{traceback.format_exc()}")
+            return ""
 
     async def run(self):
         """Run the telegram bot"""
@@ -185,6 +206,14 @@ class TelegramView(BaseView):
         try:
             await self.bot_interface.run()
         except Exception as e:
+            # Report error using the centralized bug catcher function
+            report_error_if_enabled(
+                self.config, 
+                e, 
+                "Critical error in telegram bot run", 
+                {"bot_interface_type": type(self.bot_interface).__name__}
+            )
+            
             logger.error(f"Error running telegram bot: {e}\n{traceback.format_exc()}")
             raise
 

@@ -5,6 +5,7 @@ from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 import traceback
 from ..messages import get_message
+from common_utils.logging.bug_catcher import report_error_if_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -36,10 +37,22 @@ class ShowcaseInterface:
 
     async def send_message(self, chat_id: int, message: str) -> None:
         """Send a message via Telegram bot"""
-        logger.debug(f"Sending message to {chat_id}: {message[:50]}...")
-        await self.bot.send_message(chat_id=chat_id, text=message)
-        # Add AI response to chat history
-        self.chat_history.append({"type": "ai", "message": message})
+        try:
+            logger.debug(f"Sending message to {chat_id}: {message[:50]}...")
+            await self.bot.send_message(chat_id=chat_id, text=message)
+            # Add AI response to chat history
+            self.chat_history.append({"type": "ai", "message": message})
+        except Exception as e:
+            # Report error using the centralized bug catcher function
+            report_error_if_enabled(
+                self.config, 
+                e, 
+                "Error sending message (Showcase Interface)", 
+                {"chat_id": chat_id, "message_length": len(message)}
+            )
+            
+            logger.error(f"Error sending message: {e}\n{traceback.format_exc()}")
+            raise
 
     async def _send_error_message(self, message: types.Message, language_code: str):
         """Send an error message to the user"""
@@ -87,6 +100,14 @@ class ShowcaseInterface:
             try:
                 await handle_message(message_data)
             except Exception as e:
+                # Report error using the centralized bug catcher function
+                report_error_if_enabled(
+                    config, 
+                    e, 
+                    "Error in orchestrator callback (Showcase Interface)", 
+                    {"message_type": message_type, "user_id": message.from_user.id}
+                )
+                
                 logger.error(f"Error in orchestrator callback: {e}\n{traceback.format_exc()}")
                 if message_type == "text_message":
                     # Only show error to user for text messages
@@ -157,6 +178,14 @@ class ShowcaseInterface:
                 await process_message(message, "text_message", message.text)
 
             except Exception as e:
+                # Report error using the centralized bug catcher function
+                report_error_if_enabled(
+                    config, 
+                    e, 
+                    "Error handling message (Showcase Interface)", 
+                    {"user_id": message.from_user.id, "content_type": message.content_type}
+                )
+                
                 logger.error(f"Error handling message: {e}\n{traceback.format_exc()}")
                 await self._send_error_message(message, language_code)
 
@@ -166,6 +195,14 @@ class ShowcaseInterface:
         try:
             await self.dp.start_polling(self.bot)
         except Exception as e:
+            # Report error using the centralized bug catcher function
+            report_error_if_enabled(
+                self.config, 
+                e, 
+                "Critical error in telegram bot polling (Showcase Interface)", 
+                {"bot_token_configured": bool(self.bot.token)}
+            )
+            
             logger.error(f"Error running telegram bot: {e}\n{traceback.format_exc()}")
             raise
         finally:

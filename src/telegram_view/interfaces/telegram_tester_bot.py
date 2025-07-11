@@ -6,6 +6,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 import traceback
 from ..messages import get_message
 from .tester_utils import handle_issue_report
+from common_utils.logging.bug_catcher import report_error_if_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +40,22 @@ class TesterBotInterface:
 
     async def send_message(self, chat_id: int, message: str) -> None:
         """Send a message via Telegram bot"""
-        logger.debug(f"Sending message to {chat_id}: {message[:50]}...")
-        await self.bot.send_message(chat_id=chat_id, text=message)
-        # Add AI response to chat history for issue reporting
-        self.chat_history.append({"type": "ai", "message": message})
+        try:
+            logger.debug(f"Sending message to {chat_id}: {message[:50]}...")
+            await self.bot.send_message(chat_id=chat_id, text=message)
+            # Add AI response to chat history for issue reporting
+            self.chat_history.append({"type": "ai", "message": message})
+        except Exception as e:
+            # Report error using the centralized bug catcher function
+            report_error_if_enabled(
+                self.config, 
+                e, 
+                "Error sending message (Tester Interface)", 
+                {"chat_id": chat_id, "message_length": len(message)}
+            )
+            
+            logger.error(f"Error sending message: {e}\n{traceback.format_exc()}")
+            raise
 
     async def _send_error_message(self, message: types.Message, language_code: str):
         """Send an error message to the user"""
@@ -113,6 +126,14 @@ class TesterBotInterface:
                 #     self.chat_history.append({"type": "ai", "message": response})
                 # return response
             except Exception as e:
+                # Report error using the centralized bug catcher function
+                report_error_if_enabled(
+                    config, 
+                    e, 
+                    "Error in orchestrator callback (Tester Interface)", 
+                    {"message_type": message_type, "user_id": message.from_user.id}
+                )
+                
                 logger.error(f"Error in orchestrator callback: {e}\n{traceback.format_exc()}")
                 if message_type == "text_message":
                     # Only show error to user for text messages
@@ -200,6 +221,14 @@ class TesterBotInterface:
                 await process_message(message, "text_message", message.text)
 
             except Exception as e:
+                # Report error using the centralized bug catcher function
+                report_error_if_enabled(
+                    config, 
+                    e, 
+                    "Error handling message (Tester Interface)", 
+                    {"user_id": message.from_user.id, "content_type": message.content_type}
+                )
+                
                 logger.error(f"Error handling message: {e}\n{traceback.format_exc()}")
                 await self._send_error_message(message, language_code)
 
@@ -209,6 +238,14 @@ class TesterBotInterface:
         try:
             await self.dp.start_polling(self.bot)
         except Exception as e:
+            # Report error using the centralized bug catcher function
+            report_error_if_enabled(
+                self.config, 
+                e, 
+                "Critical error in telegram bot polling (Tester Interface)", 
+                {"bot_token_configured": bool(self.bot.token)}
+            )
+            
             logger.error(f"Error running telegram bot: {e}\n{traceback.format_exc()}")
             raise
         finally:
