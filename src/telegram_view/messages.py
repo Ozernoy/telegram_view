@@ -20,7 +20,8 @@ The more details you provide, the better I'll be able to assist your customers! 
 You can now chat with me as if you were a customer. I'll respond based on the information you provided.
 
 Feel free to ask any questions about your business, and I'll do my best to help! 🚀""",
-        "error": "I apologize, but an error occurred. Please try again or contact support if the issue persists."
+        "error": "I apologize, but an error occurred. Please try again or contact support if the issue persists.",
+        "unsupported_content": "I can only process text messages at the moment. Please send me a text message instead of photos, videos, or other media. 📝"
     },
     "ru": {
         "welcome": """👋 Добро пожаловать! Я ваш бизнес-ассистент.
@@ -41,7 +42,8 @@ Feel free to ask any questions about your business, and I'll do my best to help!
 Теперь вы можете общаться со мной как клиент. Я буду отвечать на основе предоставленной вами информации.
 
 Не стесняйтесь задавать любые вопросы о вашем бизнесе, и я сделаю все возможное, чтобы помочь! 🚀""",
-        "error": "Извините, произошла ошибка. Пожалуйста, попробуйте еще раз или обратитесь в поддержку, если проблема не устранена."
+        "error": "Извините, произошла ошибка. Пожалуйста, попробуйте еще раз или обратитесь в поддержку, если проблема не устранена.",
+        "unsupported_content": "Я могу обрабатывать только текстовые сообщения. Пожалуйста, отправьте мне текстовое сообщение вместо фотографий, видео или других медиафайлов. 📝"
     },
     "he": {
         "welcome": """👋 ברוך הבא! אני הבוט העסקי שלך.
@@ -62,7 +64,8 @@ Feel free to ask any questions about your business, and I'll do my best to help!
 כעת אתה יכול לשוחח איתי כאילו היית לקוח. אני אגיב בהתבסס על המידע שסיפקת.
 
 אל תהסס לשאול כל שאלה על העסק שלך, ואני אעשה כמיטב יכולתי לעזור! 🚀""",
-        "error": "אני מתנצל, אך אירעה שגיאה. אנא נסה שוב או פנה לתמיכה אם הבעיה נמשכת."
+        "error": "אני מתנצל, אך אירעה שגיאה. אנא נסה שוב או פנה לתמיכה אם הבעיה נמשכת.",
+        "unsupported_content": "אני יכול לעבד רק הודעות טקסט כרגע. אנא שלח לי הודעת טקסט במקום תמונות, סרטונים או מדיה אחרת. 📝"
     }
 }
 

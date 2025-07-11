@@ -47,6 +47,12 @@ class ShowcaseInterface:
         await message.answer(error_message, reply_markup=self.get_main_keyboard())
         self.chat_history.append({"type": "ai", "message": error_message})
 
+    async def _send_unsupported_content_message(self, message: types.Message, language_code: str):
+        """Send a message for unsupported content types"""
+        unsupported_message = get_message("unsupported_content", language_code)
+        await message.answer(unsupported_message, reply_markup=self.get_main_keyboard())
+        self.chat_history.append({"type": "ai", "message": unsupported_message})
+
     def setup_handlers(self, handle_message: Callable, config):
         """Setup message handlers for the Telegram bot
         
@@ -126,8 +132,20 @@ class ShowcaseInterface:
             await message.bot.send_chat_action(message.chat.id, "typing")
 
             try:
-                if message.content_type != "text":
-                    await self._send_error_message(message, language_code)
+                if message.content_type == "photo":
+                    # Handle photo messages - process like text with [photo] prefix
+                    photo_text = "[photo]"
+                    if message.caption:
+                        photo_text += " " + message.caption
+                    
+                    # Add to chat history
+                    self.chat_history.append({"type": "user", "message": photo_text})
+                    
+                    # Process as normal text message
+                    await process_message(message, "text_message", photo_text)
+                    return
+                elif message.content_type != "text":
+                    await self._send_unsupported_content_message(message, language_code)
                     return
 
                 # Handle start new chat button
