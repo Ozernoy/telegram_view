@@ -7,6 +7,7 @@ import traceback
 from ..messages import get_message
 from .tester_utils import handle_issue_report
 from common_utils.logging.bug_catcher import report_error_if_enabled
+from .image_utils import get_image_as_base64
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +173,8 @@ class TesterBotInterface:
         @self.dp.message()
         async def handle_telegram_message(message: types.Message):
             """Handle incoming messages"""
+            logging.debug(f"Telegram Message: {message}")
+
             user_id = message.from_user.id
             language_code = message.from_user.language_code or "en"
 
@@ -183,18 +186,25 @@ class TesterBotInterface:
 
             try:
                 if message.content_type == "photo":
-                    # Handle photo messages - process like text with [photo] prefix
-                    photo_text = "[photo]"
-                    if message.caption:
-                        photo_text += " " + message.caption
-                    
-                    # Add to chat history
-                    self.chat_history.append({"type": "user", "message": photo_text})
-                    
-                    # Process as normal text message
-                    await process_message(message, "text_message", photo_text)
+                    # Handle photo messages - convert to base64
+                    base64_image = await get_image_as_base64(self.bot, message)
+                    if base64_image:
+                        caption = message.caption if message.caption else ""
+                        
+                        # Create combined image data
+                        image_data = {
+                            "image": base64_image,
+                            "caption": caption
+                        }
+                        
+                        # Add to chat history
+                        chat_message = caption if caption else "Image sent"
+                        self.chat_history.append({"type": "user", "message": chat_message})
+                        
+                        # Process as an image message
+                        await process_message(message, "image_message", image_data)
                     return
-                elif message.content_type != "text":
+                elif message.content_type not in ["text", "photo"]:
                     await self._send_unsupported_content_message(message, language_code)
                     return
 

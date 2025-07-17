@@ -126,6 +126,28 @@ class TelegramView(BaseView):
                     await self.view_callback(request)
                 return None
                 
+            elif message_type == "image_message":
+                # Handle image messages
+                image_data = message_data.get("text", {})
+                request = Message(
+                    webhook_type="incoming_message",
+                    platform="telegram",
+                    timestamp=message_data.get("timestamp", int(time.time())),
+                    message_type="image",
+                    data=image_data.get("image", ""),  # Base64 image data goes in data field
+                    description=image_data.get("caption", ""),  # Caption text goes in description field
+                    chatbot_id=self.token,
+                    sender_id=str(message_data.get("user_id")),
+                    sender_name=message_data.get("full_name"),
+                    chat_type="c",
+                )
+                
+                logger.debug(f"Sending image request to orchestrator for user: {request.sender_id}")
+                
+                if self.view_callback:
+                    await self.view_callback(request)
+                return None
+
             elif message_type == "text_message":
                 # Handle normal text messages
                 request = Message(
