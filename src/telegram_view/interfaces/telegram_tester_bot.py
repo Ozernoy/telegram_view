@@ -7,7 +7,7 @@ import traceback
 from ..messages import get_message
 from .tester_utils import handle_issue_report
 from common_utils.logging.bug_catcher import report_error_if_enabled
-from .image_utils import get_image_as_base64
+from .image_utils import get_image_as_base64, get_image_as_url
 
 logger = logging.getLogger(__name__)
 
@@ -186,14 +186,14 @@ class TesterBotInterface:
 
             try:
                 if message.content_type == "photo":
-                    # Handle photo messages - convert to base64
-                    base64_image = await get_image_as_base64(self.bot, message)
-                    if base64_image:
+                    # Handle photo messages - get URL instead of base64
+                    image_url = await get_image_as_url(self.bot, message)
+                    if image_url:
                         caption = message.caption if message.caption else ""
                         
-                        # Create combined image data
+                        # Create combined image data with URL
                         image_data = {
-                            "image": base64_image,
+                            "image": image_url,
                             "caption": caption
                         }
                         

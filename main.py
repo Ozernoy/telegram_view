@@ -3,7 +3,7 @@ import logging
 import os
 from dotenv import load_dotenv
 from src.telegram_view.view import TelegramView
-from agent_ti.utils.schemas import AgentRequest, AgentResponse
+from common_utils.schemas import AgentRequest, AgentResponse
 
 
 def setup_logging():

@@ -38,4 +38,39 @@ async def get_image_as_base64(bot: Bot, message: types.Message) -> Optional[str]
 
     except Exception as e:
         logger.error(f"Failed to process image and convert to base64: {e}")
+        return None
+
+
+async def get_image_as_url(bot: Bot, message: types.Message) -> Optional[str]:
+    """
+    Gets the download URL for the highest resolution photo from a message.
+    
+    Args:
+        bot: The aiogram Bot instance.
+        message: The message object containing the photo.
+
+    Returns:
+        A download URL string for the image, or None if no photo is found or an error occurs.
+        Note: The URL is only guaranteed to be valid for at least 1 hour.
+    """
+    if not message.photo:
+        return None
+
+    try:
+        # Get the highest resolution photo
+        highest_res_photo = message.photo[-1]
+        file_info = await bot.get_file(highest_res_photo.file_id)
+        
+        if not file_info.file_path:
+            logger.error("No file_path received from Telegram")
+            return None
+
+        # Construct the download URL
+        # Format: https://api.telegram.org/file/bot<token>/<file_path>
+        download_url = f"https://api.telegram.org/file/bot{bot.token}/{file_info.file_path}"
+        logger.debug(f"Download URL: {download_url}")
+        return download_url
+
+    except Exception as e:
+        logger.error(f"Failed to get image URL: {e}")
         return None 
