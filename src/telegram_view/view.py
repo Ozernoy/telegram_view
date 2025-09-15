@@ -85,6 +85,7 @@ class TelegramView(BaseView):
                     sender_id=str(message_data.get("user_id")),
                     sender_name=message_data.get("full_name"),
                     chat_type="c",
+                    chat_id=str(message_data.get("chat_id")),
                 )
 
 
@@ -114,6 +115,7 @@ class TelegramView(BaseView):
                     sender_id=str(message_data.get("user_id")),
                     sender_name=message_data.get("full_name"),
                     chat_type="c",
+                    chat_id=str(message_data.get("chat_id")),
                 )
                 # request = AgentRequest(
                 #     chat_id=0,  # Using 0 as a placeholder for all chats
@@ -140,6 +142,7 @@ class TelegramView(BaseView):
                     sender_id=str(message_data.get("user_id")),
                     sender_name=message_data.get("full_name"),
                     chat_type="c",
+                    chat_id=str(message_data.get("chat_id")),
                 )
                 
                 logger.debug(f"Sending image request to orchestrator for user: {request.sender_id}")
@@ -160,6 +163,7 @@ class TelegramView(BaseView):
                     sender_id=str(message_data.get("user_id")),
                     sender_name=message_data.get("full_name"),
                     chat_type="c",
+                    chat_id=str(message_data.get("chat_id")),
                 )
 
                 # request = AgentRequest(
