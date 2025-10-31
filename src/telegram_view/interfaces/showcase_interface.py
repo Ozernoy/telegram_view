@@ -78,6 +78,7 @@ class ShowcaseInterface:
         async def process_message(message: types.Message, message_type: str, text: str = None):
             """Unified message processing function"""
             user_id = message.from_user.id
+            chat_id = message.chat.id
             username = message.from_user.username
             first_name = message.from_user.first_name
             last_name = message.from_user.last_name
@@ -87,12 +88,14 @@ class ShowcaseInterface:
             message_data = {
                 "type": message_type,
                 "user_id": user_id,
+                "chat_id": chat_id,
                 "username": username,
                 "first_name": first_name,
                 "last_name": last_name,
                 "full_name": message.from_user.full_name,
                 "language_code": language_code,
-                "text": text
+                "text": text,
+                "timestamp": int(message.date.timestamp())
             }
             
             logger.info(f"Processing {message_type} from user {username} (ID: {user_id})")
