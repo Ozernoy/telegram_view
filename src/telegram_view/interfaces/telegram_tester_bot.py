@@ -1,12 +1,13 @@
 import logging
 from typing import Callable, Optional, Dict, List, Any
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 import traceback
 from ..messages import get_message
 from .tester_utils import handle_issue_report
 from common_utils.logging.bug_catcher import report_error_if_enabled
+from common_utils.allowed_models import ALLOWED_MODELS, get_model_by_id
 from .image_utils import get_image_as_base64, get_image_as_url
 
 logger = logging.getLogger(__name__)
@@ -24,20 +25,41 @@ class TesterBotInterface:
         self.chat_history = []
         self.reporting_users: set[int] = set()
         self.config = config
+        # Per-user model preferences storage
+        self.user_model_preferences: Dict[int, str] = {}
+        # Check if model selector should be shown (from view config)
+        self.show_model_selector = getattr(getattr(config, 'view', None), 'show_model_selector', False)
+
+    def get_user_model(self, user_id: int) -> Optional[str]:
+        """Get the selected model for a user, or None for default"""
+        return self.user_model_preferences.get(user_id)
+
+    def set_user_model(self, user_id: int, model_id: str) -> None:
+        """Set the selected model for a user"""
+        self.user_model_preferences[user_id] = model_id
+        logger.info(f"User {user_id} selected model: {model_id}")
 
     def get_main_keyboard(self) -> ReplyKeyboardMarkup:
         """Create a keyboard with the main action buttons"""
-        keyboard = ReplyKeyboardMarkup(
-            keyboard=[
-                [
-                    KeyboardButton(text="🔄 Start New Chat"),
-                    KeyboardButton(text="⚠️ Report Issue"),
-                ],
+        buttons = [
+            [
+                KeyboardButton(text="🔄 Start New Chat"),
+                KeyboardButton(text="⚠️ Report Issue"),
             ],
-            resize_keyboard=True,
-            is_persistent=True,
-        )
+        ]
+        # Add model selector button if enabled in config
+        if self.show_model_selector:
+            buttons.append([KeyboardButton(text="🤖 Select Model")])
+        
+        keyboard = ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True, is_persistent=True)
         return keyboard
+
+    def get_model_selection_keyboard(self) -> InlineKeyboardMarkup:
+        """Create an inline keyboard with available models"""
+        buttons = []
+        for model in ALLOWED_MODELS:
+            buttons.append([InlineKeyboardButton(text=model["name"], callback_data=f"select_model:{model['id']}")])
+        return InlineKeyboardMarkup(inline_keyboard=buttons)
 
     async def send_message(self, chat_id: int, message: str) -> None:
         """Send a message via Telegram bot"""
@@ -78,15 +100,57 @@ class TesterBotInterface:
         await message.answer(prompt, reply_markup=self.get_main_keyboard())
         self.chat_history.append({"type": "ai", "message": prompt})
 
+    def _get_current_model_info(self, user_id: int) -> dict:
+        """Get the model info for the current session - either user-selected or config default."""
+        selected_model_id = self.get_user_model(user_id)
+        
+        if selected_model_id:
+            # User explicitly selected a model
+            model_info = get_model_by_id(selected_model_id)
+            if model_info:
+                return {**model_info, "source": "user_selected"}
+        
+        # Fall back to config default
+        llm_config = getattr(self.config, 'llm', None)
+        if llm_config and hasattr(llm_config, 'large'):
+            large_config = llm_config.large
+            return {
+                "id": getattr(large_config, 'model', 'unknown'),
+                "provider": getattr(large_config, 'provider', 'unknown'),
+                "temperature": getattr(large_config, 'temperature', None),
+                "source": "config_default"
+            }
+        
+        return {"source": "unknown"}
+
     async def _handle_issue_submission(self, message: types.Message):
         """Handle issue report submission"""
         user_id = message.from_user.id
         self.reporting_users.remove(user_id)
-        await handle_issue_report(user_id, message.text, self.chat_history, self.config)
+        
+        # Get model info (either user-selected or config default)
+        model_info = self._get_current_model_info(user_id)
+        
+        await handle_issue_report(user_id, message.text, self.chat_history, self.config, model_info)
         confirmation = "Thank you for reporting the issue, starting new chat..."
         await message.answer(confirmation, reply_markup=self.get_main_keyboard())
         self.chat_history.append({"type": "ai", "message": confirmation})
         # Need to call start_command - we'll handle this in setup_handlers
+
+    async def _handle_model_selection(self, message: types.Message):
+        """Handle the model selection command - show inline keyboard with models"""
+        user_id = message.from_user.id
+        current_model = self.get_user_model(user_id)
+        current_model_name = "Default"
+        if current_model:
+            for model in ALLOWED_MODELS:
+                if model["id"] == current_model:
+                    current_model_name = model["name"]
+                    break
+        
+        prompt = f"Current model: {current_model_name}\n\nSelect a model:"
+        await message.answer(prompt, reply_markup=self.get_model_selection_keyboard())
+        self.chat_history.append({"type": "ai", "message": prompt})
 
     def setup_handlers(self, handle_message: Callable, config):
         """Setup message handlers for the Telegram bot
@@ -105,6 +169,9 @@ class TesterBotInterface:
             last_name = message.from_user.last_name
             language_code = message.from_user.language_code or "en"
             
+            # Get user's selected model (if any)
+            selected_model = self.get_user_model(user_id)
+            
             # Create unified message data structure
             message_data = {
                 "type": message_type,
@@ -116,7 +183,8 @@ class TesterBotInterface:
                 "full_name": message.from_user.full_name,
                 "language_code": language_code,
                 "text": text,
-                "timestamp": int(message.date.timestamp())
+                "timestamp": int(message.date.timestamp()),
+                "settings": {"model": selected_model} if selected_model else {}
             }
             
             logger.info(f"Processing {message_type} from user {username} (ID: {user_id})")
@@ -173,6 +241,26 @@ class TesterBotInterface:
             # Clear local chat history after orchestrator processes the request
             self.chat_history.clear()
 
+        @self.dp.callback_query(F.data.startswith("select_model:"))
+        async def handle_model_selection_callback(callback: CallbackQuery):
+            """Handle model selection from inline keyboard"""
+            user_id = callback.from_user.id
+            model_id = callback.data.split(":")[1]
+            
+            # Find model name for confirmation message
+            model_name = model_id
+            for model in ALLOWED_MODELS:
+                if model["id"] == model_id:
+                    model_name = model["name"]
+                    break
+            
+            # Store user's model preference
+            self.set_user_model(user_id, model_id)
+            
+            # Acknowledge the callback and update message
+            await callback.answer(f"Selected: {model_name}")
+            await callback.message.edit_text(f"✅ Model changed to: {model_name}\n\nYour next messages will use this model.")
+
         @self.dp.message()
         async def handle_telegram_message(message: types.Message):
             """Handle incoming messages"""
@@ -209,6 +297,11 @@ class TesterBotInterface:
                     return
                 elif message.content_type not in ["text", "photo"]:
                     await self._send_unsupported_content_message(message, language_code)
+                    return
+
+                # Handle model selection button
+                if message.text == "🤖 Select Model" and self.show_model_selector:
+                    await self._handle_model_selection(message)
                     return
 
                 # Command pattern for special button commands

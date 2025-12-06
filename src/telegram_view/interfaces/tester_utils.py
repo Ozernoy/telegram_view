@@ -42,8 +42,22 @@ def format_chat_history(chat_history: List[Dict[str, Any]]) -> str:
     return "\n".join(formatted_messages)
 
 
+def format_model_info(model_info: Dict[str, Any]) -> str:
+    """Format model info into a readable string."""
+    if not model_info:
+        return "Default (no model selected)"
+    
+    lines = []
+    for key, value in model_info.items():
+        if isinstance(value, dict):
+            lines.append(f"{key}: {value}")
+        else:
+            lines.append(f"{key}: {value}")
+    return "\n".join(lines)
+
+
 async def handle_issue_report(
-    chat_id: int, issue_details: str, chat_history: List[Dict[str, Any]], config
+    chat_id: int, issue_details: str, chat_history: List[Dict[str, Any]], config, model_info: Dict[str, Any] = None
 ) -> None:
     """
     Handle issue reports by logging them and appending to Google Sheets.
@@ -52,12 +66,17 @@ async def handle_issue_report(
         chat_id: The ID of the chat where the issue was reported
         issue_details: The details of the reported issue
         chat_history: List of chat messages in the conversation, each with type and message fields
+        config: Configuration object
+        model_info: Dictionary containing model configuration used during the session
     """
     # Log the issue report
     logger.info(f"Received issue report from chat {chat_id}")
     logger.info("Issue details:")
     logger.info("-" * 50)
     logger.info(issue_details)
+    logger.info("-" * 50)
+    logger.info("Model info:")
+    logger.info(model_info if model_info else "Default")
     logger.info("-" * 50)
     logger.info("Chat history:")
     for msg in chat_history:
@@ -73,12 +92,14 @@ async def handle_issue_report(
 
         # Format chat history into a string
         chat_history_str = format_chat_history(chat_history)
+        model_info_str = format_model_info(model_info)
 
         # Prepare the row data
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         row_data = [
             current_time,  # Date
-            chat_history_str,  # Thread (now contains the formatted chat history)
+            model_info_str,  # Model Info
+            chat_history_str,  # Thread (formatted chat history)
             issue_details,  # Description
         ]
 
