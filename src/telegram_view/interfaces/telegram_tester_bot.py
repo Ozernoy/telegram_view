@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, Optional, Dict, List, Any
+from typing import Callable, Optional, Dict
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -8,7 +8,8 @@ from ..messages import get_message
 from .tester_utils import handle_issue_report
 from common_utils.logging.bug_catcher import report_error_if_enabled
 from common_utils.allowed_models import ALLOWED_MODELS, get_model_by_id
-from .image_utils import get_image_as_base64, get_image_as_url
+from .image_utils import get_image_as_url
+from .file_utils import get_file_as_base64, get_audio_as_base64, is_supported_document
 
 logger = logging.getLogger(__name__)
 
@@ -217,7 +218,7 @@ class TesterBotInterface:
         @self.dp.message(Command(commands=["start"]))
         async def start_command(message: types.Message):
             """Handle the /start command"""
-            logging.debug(f"Message: {message}")
+            # logging.debug(f"Message: {message}")
             # Clear local state before processing
             user_id = message.from_user.id
             self.chat_history.clear()
@@ -271,7 +272,7 @@ class TesterBotInterface:
         @self.dp.message()
         async def handle_telegram_message(message: types.Message):
             """Handle incoming messages"""
-            logging.debug(f"Telegram Message: {message}")
+            # logging.debug(f"Telegram Message: {message}")
 
             user_id = message.from_user.id
             language_code = message.from_user.language_code or "en"
@@ -302,7 +303,64 @@ class TesterBotInterface:
                         # Process as an image message
                         await process_message(message, "image_message", image_data)
                     return
-                elif message.content_type not in ["text", "photo"]:
+                
+                elif message.content_type == "document":
+                    # Handle document messages (PDF, DOC, TXT)
+                    if not is_supported_document(message):
+                        await self._send_unsupported_content_message(message, language_code)
+                        return
+                    
+                    caption = message.caption if message.caption else ""
+                    file_name = message.document.file_name if message.document else "document"
+                    
+                    # Use base64 to embed file content for persistence across turns
+                    logger.debug(f"Processing document: {file_name}")
+                    file_result = await get_file_as_base64(self.bot, message)
+                    
+                    if file_result:
+                        file_data, mime_type = file_result
+                        logger.info(f"Document encoded to base64: {file_name} ({mime_type}, {len(file_data)} chars)")
+                        document_data = {
+                            "file": file_data,
+                            "mime_type": mime_type,
+                            "file_name": file_name,
+                            "caption": caption
+                        }
+                        
+                        chat_message = caption if caption else f"Document sent: {file_name}"
+                        self.chat_history.append({"type": "user", "message": chat_message})
+                        
+                        await process_message(message, "document_message", document_data)
+                    else:
+                        logger.error(f"Failed to encode document to base64: {file_name}")
+                    return
+                
+                elif message.content_type in ["voice", "audio"]:
+                    # Handle voice/audio messages
+                    caption = message.caption if message.caption else ""
+                    
+                    # Use base64 to embed audio content for persistence across turns
+                    logger.debug(f"Processing audio message (type: {message.content_type})")
+                    audio_result = await get_audio_as_base64(self.bot, message)
+                    
+                    if audio_result:
+                        audio_data, mime_type = audio_result
+                        logger.info(f"Audio encoded to base64: {mime_type} ({len(audio_data)} chars)")
+                        audio_msg_data = {
+                            "audio": audio_data,
+                            "mime_type": mime_type,
+                            "caption": caption
+                        }
+                        
+                        chat_message = caption if caption else "Audio message sent"
+                        self.chat_history.append({"type": "user", "message": chat_message})
+                        
+                        await process_message(message, "audio_message", audio_msg_data)
+                    else:
+                        logger.error(f"Failed to encode audio to base64")
+                    return
+                
+                elif message.content_type not in ["text", "photo", "document", "voice", "audio"]:
                     await self._send_unsupported_content_message(message, language_code)
                     return
 
