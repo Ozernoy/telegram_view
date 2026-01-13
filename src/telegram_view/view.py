@@ -29,7 +29,7 @@ class TelegramView(BaseView):
         
         self.view_callback = view_callback
         self.config = config
-        logger.info(f"Config: {self.config}")
+        # logger.info(f"Config: {self.config}")
         self.view_config = config.view
         
         # Initialize the Telegram bot interface based on config
@@ -152,6 +152,58 @@ class TelegramView(BaseView):
                     await self.view_callback(request)
                 return None
 
+            elif message_type == "document_message":
+                # Handle document messages (PDF, DOC, TXT)
+                doc_data = message_data.get("text", {})
+                # Store file URL/base64, mime_type and filename in data as JSON-like string
+                file_info = f"{doc_data.get('file', '')}|{doc_data.get('mime_type', '')}|{doc_data.get('file_name', '')}"
+                request = Message(
+                    webhook_type="incoming_message",
+                    platform="telegram",
+                    timestamp=message_data.get("timestamp", int(time.time())),
+                    message_type="document",
+                    data=file_info,
+                    description=doc_data.get("caption", ""),
+                    chatbot_id=self.token,
+                    sender_id=str(message_data.get("user_id")),
+                    sender_name=message_data.get("full_name"),
+                    chat_type="c",
+                    chat_id=str(message_data.get("chat_id")),
+                    settings=message_data.get("settings", {}),
+                )
+                
+                logger.debug(f"Sending document request to orchestrator for user: {request.sender_id}")
+                
+                if self.view_callback:
+                    await self.view_callback(request)
+                return None
+
+            elif message_type == "audio_message":
+                # Handle audio/voice messages
+                audio_data = message_data.get("text", {})
+                # Store audio URL/base64 and mime_type in data
+                audio_info = f"{audio_data.get('audio', '')}|{audio_data.get('mime_type', '')}"
+                request = Message(
+                    webhook_type="incoming_message",
+                    platform="telegram",
+                    timestamp=message_data.get("timestamp", int(time.time())),
+                    message_type="audio",
+                    data=audio_info,
+                    description=audio_data.get("caption", ""),
+                    chatbot_id=self.token,
+                    sender_id=str(message_data.get("user_id")),
+                    sender_name=message_data.get("full_name"),
+                    chat_type="c",
+                    chat_id=str(message_data.get("chat_id")),
+                    settings=message_data.get("settings", {}),
+                )
+                
+                logger.debug(f"Sending audio request to orchestrator for user: {request.sender_id}")
+                
+                if self.view_callback:
+                    await self.view_callback(request)
+                return None
+
             elif message_type == "text_message":
                 # Handle normal text messages
                 request = Message(
@@ -180,7 +232,7 @@ class TelegramView(BaseView):
                 #     bypass=False,
                 # )
                 
-                logger.debug(f"Sending message request to orchestrator: {request}")
+                logger.debug(f"Sending message request to orchestrator: type={request.message_type}, chat_id={request.chat_id}")
                 
                 if self.view_callback:
                     response = await self.view_callback(request)
