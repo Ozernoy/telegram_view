@@ -36,7 +36,7 @@ async def main():
     # Get bot token
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
-        logger.error("TELEGRAM_BOT_TOKEN not found in environment variables")
+        logger.error("[chat_id:init] TELEGRAM_BOT_TOKEN not found in environment variables")
         print("Please set TELEGRAM_BOT_TOKEN in your environment variables")
         return
 
@@ -46,7 +46,7 @@ async def main():
     try:
         await bot.run()
     except Exception as e:
-        logger.error(f"Error running bot: {e}")
+        logger.error(f"[chat_id:main] Error running bot: {e}")
         raise
 
 

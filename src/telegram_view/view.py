@@ -250,7 +250,8 @@ class TelegramView(BaseView):
                 {"message_data": str(message_data)}
             )
             
-            logger.error(f"Error in _handle_bot_message: {e}\n{traceback.format_exc()}")
+            chat_id = message_data.get("chat_id", "unknown")
+            logger.error(f"[chat_id:{chat_id}] Error in _handle_bot_message: {e}\n{traceback.format_exc()}")
             return None
 
     async def send_message(self, chat_id: str, message: str) -> str:
@@ -277,7 +278,7 @@ class TelegramView(BaseView):
                 {"chat_id": chat_id, "message_length": len(message) if message else 0}
             )
             
-            logger.error(f"Error sending message: {e}\n{traceback.format_exc()}")
+            logger.error(f"[chat_id:{chat_id}] Error sending message: {e}\n{traceback.format_exc()}")
             return ""
 
     async def run(self):
@@ -294,7 +295,7 @@ class TelegramView(BaseView):
                 {"bot_interface_type": type(self.bot_interface).__name__}
             )
             
-            logger.error(f"Error running telegram bot: {e}\n{traceback.format_exc()}")
+            logger.error(f"[chat_id:bot] Error running telegram bot: {e}\n{traceback.format_exc()}")
             raise
 
 
@@ -332,5 +333,5 @@ if __name__ == "__main__":
         bot = TelegramView(None, MockConfig())
         asyncio.run(bot.run())
     else:
-        logger.error("TELEGRAM_BOT_TOKEN not found in environment variables")
+        logger.error("[chat_id:init] TELEGRAM_BOT_TOKEN not found in environment variables")
         print("Please set TELEGRAM_BOT_TOKEN in your environment variables")

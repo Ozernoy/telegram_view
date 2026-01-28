@@ -52,7 +52,7 @@ class ShowcaseInterface:
                 {"chat_id": chat_id, "message_length": len(message)}
             )
             
-            logger.error(f"Error sending message: {e}\n{traceback.format_exc()}")
+            logger.error(f"[chat_id:{chat_id}] Error sending message: {e}\n{traceback.format_exc()}")
             raise
 
     async def _send_error_message(self, message: types.Message, language_code: str):
@@ -112,7 +112,7 @@ class ShowcaseInterface:
                     {"message_type": message_type, "user_id": message.from_user.id}
                 )
                 
-                logger.error(f"Error in orchestrator callback: {e}\n{traceback.format_exc()}")
+                logger.error(f"[chat_id:{chat_id}] Error in orchestrator callback: {e}\n{traceback.format_exc()}")
                 if message_type == "text_message":
                     # Only show error to user for text messages
                     error_message = get_message("error", language_code)
@@ -199,7 +199,7 @@ class ShowcaseInterface:
                     {"user_id": message.from_user.id, "content_type": message.content_type}
                 )
                 
-                logger.error(f"Error handling message: {e}\n{traceback.format_exc()}")
+                logger.error(f"[chat_id:{message.chat.id}] Error handling message: {e}\n{traceback.format_exc()}")
                 await self._send_error_message(message, language_code)
 
     async def run(self):
@@ -216,7 +216,7 @@ class ShowcaseInterface:
                 {"bot_token_configured": bool(self.bot.token)}
             )
             
-            logger.error(f"Error running telegram bot: {e}\n{traceback.format_exc()}")
+            logger.error(f"[chat_id:bot] Error running telegram bot: {e}\n{traceback.format_exc()}")
             raise
         finally:
             await self.bot.session.close() 
