@@ -405,7 +405,9 @@ class TesterBotInterface:
 
     async def run(self):
         """Run the telegram bot"""
-        logger.debug("Starting telegram bot polling")
+        # Fetch bot info and log the bot name
+        bot_info = await self.bot.get_me()
+        logger.info(f"Starting Telegram bot: @{bot_info.username} ({bot_info.first_name})")
         try:
             await self.dp.start_polling(self.bot)
         except Exception as e:
