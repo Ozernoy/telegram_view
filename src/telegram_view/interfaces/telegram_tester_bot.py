@@ -235,7 +235,7 @@ class TesterBotInterface:
             if self.show_model_selector:
                 model_info = self._get_current_model_info(user_id)
                 model_name = model_info.get("name") or model_info.get("id", "Unknown")
-                welcome_msg += f"\n\n🤖 Model: {model_name}"
+                welcome_msg += f"\n🤖 Model: {model_name}"
             
             await message.answer(welcome_msg, reply_markup=keyboard)
             self.chat_history.append({"type": "ai", "message": welcome_msg})
